@@ -95,7 +95,7 @@ class MatMul(Layer):
 
     def apply(self, inputs, variables):
         rows = inputs[:, None]
-        return tf.matmul(rows, variables)[:, 0]
+        return tf.matmul(rows, variables[0])[:, 0]
 
     def apply_init(self, inputs):
         return tf.matmul(inputs, self.matrix)
@@ -114,7 +114,7 @@ class Bias(Layer):
         return (self.biases,)
 
     def apply(self, inputs, variables):
-        return inputs + variables
+        return inputs + variables[0]
 
     def apply_init(self, inputs):
         return inputs + self.biases

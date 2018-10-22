@@ -27,16 +27,19 @@ class ReActFF(TFActorCritic):
                  actor=head_fc,
                  critic=lambda ins: head_fc(ins, 1)):
         super().__init__(sess, act_dist, obs_vect)
-        self.obs_ph = tf.placeholder(input_dtype, shape=(None,) + obs_vect.out_shape)
+        self.obs_ph = tf.placeholder(input_dtype, shape=(None,) + obs_vect.out_shape, name='obs')
         obs = tf.cast(self.obs_ph, tf.float32) * input_scale
         with tf.variable_scope(None, default_name='base'):
             self.base_out = base(obs)
         with tf.variable_scope(None, default_name='actor'):
             num_outs = int(np.prod(act_dist.param_shape))
-            self.actor = actor(self._base_out.get_shape()[-1].value, num_outs)
+            self.actor = actor(self.base_out.get_shape()[-1].value, num_outs)
         with tf.variable_scope(None, default_name='critic'):
-            self.critic = critic(self._base_out.get_shape()[-1].value)
-        self.state_phs = tuple(tf.placeholder(v.dtype.base_dtype) for v in self.actor.variables)
+            self.critic = critic(self.base_out.get_shape()[-1].value)
+        self.state_phs = tuple(tf.placeholder(v.dtype.base_dtype,
+                                              shape=(None,) + tuple(x.value for x in v.get_shape()),
+                                              name='state_%d' % i)
+                               for i, v in enumerate(self.actor.variables))
         self.actor_out = self.actor.apply(self.base_out, self.state_phs)
         self.critic_out = self.critic.apply_init(self.base_out)[:, 0]
         self.new_state_graph = self._make_new_state_graph()
@@ -47,19 +50,23 @@ class ReActFF(TFActorCritic):
         return True
 
     def start_state(self, batch_size):
-        return self.session.run(self.sequence_graph['batched_vars'],
-                                feed_dict={self.sequence_graph['batch_size']: batch_size})
+        values = self.session.run(self.actor.variables)
+        return tuple(np.array([x] * batch_size) for x in values)
 
     def step(self, observations, states):
         feed_dict = {self.obs_ph: self.obs_vectorizer.to_vecs(observations)}
         feed_dict.update(dict(zip(self.state_phs, states)))
-        act_params, vals = self.session.run((self.actor_out, self.critic_out), feed_dict)
+        act_params, vals, base_out = self.session.run((self.actor_out, self.critic_out,
+                                                       self.base_out), feed_dict)
         actions = self.action_dist.sample(act_params)
-        states = self.session.run(self.new_state_graph['new_state'], feed_dict={
-            self.new_state_graph['action_ph']: self.action_dist.to_vecs(actions)
+        del feed_dict[self.obs_ph]
+        feed_dict.update({
+            self.base_out: base_out,
+            self.new_state_graph['action_ph']: self.action_dist.to_vecs(actions),
         })
+        states = self.session.run(self.new_state_graph['new_state'], feed_dict=feed_dict)
         return {
-            'action_params': actions,
+            'action_params': act_params,
             'actions': actions,
             'states': states,
             'values': vals
@@ -83,8 +90,8 @@ class ReActFF(TFActorCritic):
                 for i, rollout in enumerate(batch):
                     if timestep < rollout.num_steps:
                         gather_indices[timestep, i] = len(obses)
-                        obses.append(rollout.observations[i])
-                        actions.append(rollout.model_outs[i]['actions'][0])
+                        obses.append(rollout.observations[timestep])
+                        actions.append(rollout.model_outs[timestep]['actions'][0])
                         timestep_idxs.append(timestep)
                         rollout_idxs.append(i)
                         masks.append(True)
@@ -107,7 +114,7 @@ class ReActFF(TFActorCritic):
     def _add_first_states(self, feed_dict, batch):
         result = self.start_state(len(batch))
         for i, rollout in enumerate(batch):
-            inject_state(result, rollout.start_states, i)
+            inject_state(result, rollout.start_state, i)
         feed_dict.update(dict(zip(self.state_phs, result)))
 
     def _make_new_state_graph(self):
@@ -125,18 +132,17 @@ class ReActFF(TFActorCritic):
         }
 
     def _make_sequence_graph(self):
-        action_ph = tf.placeholder(tf.float32, shape=(None,) + self.action_dist.out_shape)
-        index_ph = tf.placeholder(tf.int32, shape=(None, None))
+        action_ph = tf.placeholder(tf.float32, shape=(None,) + self.action_dist.out_shape,
+                                   name='actions')
+        index_ph = tf.placeholder(tf.int32, shape=(None, None), name='index')
         action_seq = tf.gather(action_ph, index_ph)
         base_seq = tf.gather(self.base_out, index_ph)
 
         shape = tf.shape(action_seq)
         seq_len = shape[0]
         batch_size = shape[1]
-        batched_vars = tuple(tf.tile(var[None], [batch_size] + [1] * len(var.get_shape()))
-                             for var in self.actor.variables)
-        news_ph = tf.placeholder(tf.bool, shape=(None,))
-        init_state = mix_init_states(news_ph, batched_vars, self.states_ph)
+        news_ph = tf.placeholder(tf.bool, shape=(None,), name='news')
+        init_state = mix_init_states(news_ph, self.actor.variables, self.state_phs)
 
         def step_fn(states, actor_arr, critic_arr, i):
             sub_base = base_seq[i]
@@ -158,7 +164,7 @@ class ReActFF(TFActorCritic):
                                                      tf.TensorArray(tf.float32, size=seq_len),
                                                      tf.constant(0, dtype=tf.int32)))
 
-        mask_ph = tf.placeholder(tf.bool, shape=(None,))
+        mask_ph = tf.placeholder(tf.bool, shape=(None,), name='mask')
 
         return {
             'action_ph': action_ph,
@@ -166,7 +172,6 @@ class ReActFF(TFActorCritic):
             'mask_ph': mask_ph,
             'news_ph': news_ph,
             'batch_size': batch_size,
-            'batched_vars': batched_vars,
             'actor_out': tf.boolean_mask(actor_arr.concat(), mask_ph),
             'critic_out': tf.boolean_mask(critic_arr.concat(), mask_ph),
         }
