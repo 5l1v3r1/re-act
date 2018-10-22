@@ -38,6 +38,17 @@ class Layer(ABC):
           inputs: a batch of inputs.
           variables: a tuple, where each element is a
             batch of the corresponding parameter.
+
+        Returns:
+          A batch of outputs.
+        """
+        pass
+
+    @abstractmethod
+    def apply_init(self, inputs):
+        """
+        Apply the layer to a batch of inputs using the
+        initial variables.
         """
         pass
 
@@ -63,6 +74,12 @@ class Stack(Layer):
             variables = variables[num_params:]
         return out
 
+    def apply_init(self, inputs):
+        out = inputs
+        for layer in self.layers:
+            out = layer.apply_init(out)
+        return out
+
 
 class MatMul(Layer):
     """A fully-connected layer with no biases."""
@@ -80,6 +97,9 @@ class MatMul(Layer):
         rows = inputs[:, None]
         return tf.matmul(rows, variables)[:, 0]
 
+    def apply_init(self, inputs):
+        return tf.matmul(inputs, self.matrix)
+
 
 class Bias(Layer):
     """A linear bias layer."""
@@ -95,3 +115,6 @@ class Bias(Layer):
 
     def apply(self, inputs, variables):
         return inputs + variables
+
+    def apply_init(self, inputs):
+        return inputs + self.biases
