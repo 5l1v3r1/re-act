@@ -63,7 +63,7 @@ class Stack(Layer):
     def variables(self):
         res = []
         for layer in self.layers:
-            res += layer.variables()
+            res += layer.variables
         return tuple(res)
 
     def apply(self, inputs, variables):
