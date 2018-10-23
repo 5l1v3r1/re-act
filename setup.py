@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(
-    name='anyrl',
+    name='re-act',
     version='0.0.1',
     description='Consistent exploration via live SGD',
     url='https://github.com/unixpickle/re-act',
