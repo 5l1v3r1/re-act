@@ -23,10 +23,12 @@ class ReActFF(TFActorCritic):
                  obs_vect,
                  input_scale=1 / 0xff,
                  input_dtype=tf.uint8,
+                 step_size=0.01,
                  base=impala_cnn,
                  actor=head_fc,
                  critic=lambda ins: head_fc(ins, 1)):
         super().__init__(sess, act_dist, obs_vect)
+        self.step_size = step_size
         self.obs_ph = tf.placeholder(input_dtype, shape=(None,) + obs_vect.out_shape, name='obs')
         obs = tf.cast(self.obs_ph, tf.float32) * input_scale
         with tf.variable_scope(None, default_name='base'):
@@ -125,7 +127,7 @@ class ReActFF(TFActorCritic):
             if grad is None:
                 new_state.append(state)
             else:
-                new_state.append(state + grad)
+                new_state.append(state + grad * self.step_size)
         return {
             'action_ph': action_ph,
             'new_state': tuple(new_state),
@@ -154,7 +156,7 @@ class ReActFF(TFActorCritic):
                 if grad is None:
                     new_state.append(state)
                 else:
-                    new_state.append(state + grad)
+                    new_state.append(state + grad * self.step_size)
             return tuple(new_state), actor_arr.write(i, outputs), critic_arr.write(i, values), i + 1
 
         _, actor_arr, critic_arr, _ = tf.while_loop(lambda a, b, c, d: d < seq_len,
