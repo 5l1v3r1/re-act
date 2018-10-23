@@ -95,7 +95,7 @@ class ReActFF(TFActorCritic):
                         obses.append(rollout.observations[timestep])
                         actions.append(rollout.model_outs[timestep]['actions'][0])
                         timestep_idxs.append(timestep)
-                        rollout_idxs.append(i)
+                        rollout_idxs.append(rollout_indices[i])
                         masks.append(True)
                     else:
                         masks.append(False)
