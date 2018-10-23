@@ -20,7 +20,7 @@ setup(
     install_requires=[
         'anyrl>=0.12.0,<0.13.0',
         'gym>=0.9.6,<0.11.0',
-        'mazenv>=0.4.0,<0.5.0',
+        'mazenv>=0.4.1,<0.5.0',
     ],
     extras_require={
         "tf": ["tensorflow>=1.0.0"],

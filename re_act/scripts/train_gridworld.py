@@ -23,7 +23,8 @@ def main():
     maze = parse_2d_maze(maze_data)
 
     def make_env():
-        return TimeLimit(HorizonEnv(maze, horizon=2), max_episode_steps=args.max_timesteps)
+        return TimeLimit(HorizonEnv(maze, sparse_rew=True, horizon=2),
+                         max_episode_steps=args.max_timesteps)
     env = batched_gym_env([make_env] * args.num_envs, sync=True)
 
     with tf.Session() as sess:
