@@ -10,6 +10,7 @@ import numpy as np
 import tensorflow as tf
 
 from .network import head_fc
+from .reptile import Reptile
 
 
 class ReActFF(TFActorCritic):
@@ -23,12 +24,12 @@ class ReActFF(TFActorCritic):
                  obs_vect,
                  input_scale=1 / 0xff,
                  input_dtype=tf.uint8,
-                 step_size=0.01,
+                 inner_lr=0.01,
+                 outer_lr=0.01,
                  base=impala_cnn,
                  actor=head_fc,
                  critic=lambda ins: head_fc(ins, 1)):
         super().__init__(sess, act_dist, obs_vect)
-        self.step_size = step_size
         self.obs_ph = tf.placeholder(input_dtype, shape=(None,) + obs_vect.out_shape, name='obs')
         obs = tf.cast(self.obs_ph, tf.float32) * input_scale
         with tf.variable_scope(None, default_name='base'):
@@ -38,6 +39,7 @@ class ReActFF(TFActorCritic):
             self.actor = actor(self.base_out.get_shape()[-1].value, num_outs)
         with tf.variable_scope(None, default_name='critic'):
             self.critic = critic(self.base_out.get_shape()[-1].value)
+        self.reptile = Reptile(self.actor, inner_lr, outer_lr)
         self.state_phs = tuple(tf.placeholder(v.dtype.base_dtype,
                                               shape=(None,) + tuple(x.value for x in v.get_shape()),
                                               name='state_%d' % i)
@@ -122,15 +124,10 @@ class ReActFF(TFActorCritic):
     def _make_new_state_graph(self):
         action_ph = tf.placeholder(tf.float32, shape=(None,) + self.action_dist.out_shape)
         log_probs = self.action_dist.log_prob(self.actor_out, action_ph)
-        new_state = []
-        for state, grad in zip(self.state_phs, tf.gradients(log_probs, self.state_phs)):
-            if grad is None:
-                new_state.append(state)
-            else:
-                new_state.append(state + grad * self.step_size)
+        new_state = self.reptile.updates(self.state_phs, log_probs)
         return {
             'action_ph': action_ph,
-            'new_state': tuple(new_state),
+            'new_state': new_state,
         }
 
     def _make_sequence_graph(self):
@@ -151,13 +148,8 @@ class ReActFF(TFActorCritic):
             outputs = self.actor.apply(sub_base, states)
             values = self.critic.apply_init(sub_base)[:, 0]
             log_probs = self.action_dist.log_prob(outputs, action_seq[i])
-            new_state = []
-            for state, grad in zip(states, tf.gradients(log_probs, states)):
-                if grad is None:
-                    new_state.append(state)
-                else:
-                    new_state.append(state + grad * self.step_size)
-            return tuple(new_state), actor_arr.write(i, outputs), critic_arr.write(i, values), i + 1
+            new_state = self.reptile.updates(states, log_probs, redundant=True)
+            return new_state, actor_arr.write(i, outputs), critic_arr.write(i, values), i + 1
 
         _, actor_arr, critic_arr, _ = tf.while_loop(lambda a, b, c, d: d < seq_len,
                                                     step_fn,

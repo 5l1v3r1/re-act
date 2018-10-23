@@ -118,3 +118,16 @@ class Bias(Layer):
 
     def apply_init(self, inputs):
         return inputs + self.biases
+
+
+class ReLU(Layer):
+    """An activation layer."""
+    @property
+    def variables(self):
+        return ()
+
+    def apply(self, inputs, variables):
+        return tf.nn.relu(inputs)
+
+    def apply_init(self, inputs):
+        return tf.nn.relu(inputs)
