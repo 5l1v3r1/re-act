@@ -14,12 +14,14 @@ from re_act import ReActFF
 def main():
     args = arg_parser().parse_args()
 
-    maze_data = ("A......\n" +
-                 "wwwwww.\n" +
-                 "wwwwww.\n" +
-                 "wwwwww.\n" +
-                 "wwwwww.\n" +
-                 "x......")
+    maze_data = ("A.......\n" +
+                 "wwwwwww.\n" +
+                 "wwx.www.\n" +
+                 "www.www.\n" +
+                 "www.www.\n" +
+                 "www.www.\n" +
+                 "www.www.\n" +
+                 "........")
     maze = parse_2d_maze(maze_data)
 
     def make_env():
