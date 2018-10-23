@@ -27,7 +27,8 @@ def main():
     env = batched_gym_env([make_env] * args.num_envs, sync=True)
 
     with tf.Session() as sess:
-        model = ReActFF(sess, *gym_spaces(env), input_scale=1.0, base=base_network)
+        model = ReActFF(sess, *gym_spaces(env), input_scale=1.0, step_size=args.lr,
+                        base=base_network)
         ppo = PPO(model, **ppo_kwargs(args))
         print('Initializing model variables...')
         sess.run(tf.global_variables_initializer())
@@ -45,7 +46,8 @@ def arg_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--num-envs', help='parallel environments', type=int, default=8)
     parser.add_argument('--max-timesteps', help='maximum timesteps per episode',
-                        default=3000, type=int)
+                        default=100, type=int)
+    parser.add_argument('--lr', help='online LR', default=0.01, type=float)
     ppo_cli_args(parser)
     return parser
 
