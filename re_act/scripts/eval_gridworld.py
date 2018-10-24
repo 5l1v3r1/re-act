@@ -10,34 +10,15 @@ from mazenv import HorizonEnv, parse_2d_maze
 import tensorflow as tf
 
 from re_act import ReActFF, Stack, MatMul, Bias, ReLU
-from re_act.scripts.train_gridworld import arg_parser, base_network, actor_network
+from re_act.scripts.train_gridworld import (arg_parser, base_network, actor_network,
+                                            make_env, make_model)
 
 
 def main():
     args = arg_parser().parse_args()
-
-    maze_data = ("A.......\n" +
-                 "wwwwwww.\n" +
-                 "wwx.www.\n" +
-                 "www.www.\n" +
-                 "www.www.\n" +
-                 "www.www.\n" +
-                 "www.www.\n" +
-                 "........")
-    maze = parse_2d_maze(maze_data)
-
-    def make_env():
-        return TimeLimit(HorizonEnv(maze, sparse_rew=True, horizon=2),
-                         max_episode_steps=args.max_timesteps)
-    env = batched_gym_env([make_env] * args.num_envs, sync=True)
-
+    env = make_env(args)
     with tf.Session() as sess:
-        model = ReActFF(sess, *gym_spaces(env),
-                        input_scale=1.0,
-                        inner_lr=args.inner_lr,
-                        outer_lr=args.outer_lr,
-                        base=base_network,
-                        actor=actor_network)
+        model = make_model(args, sess, env)
         print('Initializing model variables...')
         sess.run(tf.global_variables_initializer())
         roller = TruncatedRoller(env, model, 128)
@@ -48,6 +29,7 @@ def main():
             total += len(r)
             good += len([x for x in r if x.total_reward > 0])
             print('got %f (%d out of %d)' % (good / total, good, total))
+
 
 if __name__ == '__main__':
     main()
