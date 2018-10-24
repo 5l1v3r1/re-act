@@ -1,17 +1,7 @@
-import argparse
-
-from anyrl.algos import PPO
-from anyrl.envs import batched_gym_env
 from anyrl.rollouts import TruncatedRoller
-from anyrl.spaces import gym_spaces
-from anyrl.utils.ppo import ppo_cli_args, ppo_kwargs, ppo_loop_kwargs, mpi_ppo_loop
-from gym.wrappers import TimeLimit
-from mazenv import HorizonEnv, parse_2d_maze
 import tensorflow as tf
 
-from re_act import ReActFF, Stack, MatMul, Bias, ReLU
-from re_act.scripts.train_gridworld import (arg_parser, base_network, actor_network,
-                                            make_env, make_model)
+from re_act.scripts.train_gridworld import arg_parser, make_env, make_model
 
 
 def main():
